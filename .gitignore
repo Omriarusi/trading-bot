@@ -1,0 +1,25 @@
+# Credentials — must never be committed.
+*.pem
+.env
+.env.*
+secrets/
+
+# Price cache: regenerated on every run, large and churny.
+.cache/
+
+# Simulated account state from local dry runs.
+state/paper_account.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+*.egg-info/
+
+# Backtest output
+results/

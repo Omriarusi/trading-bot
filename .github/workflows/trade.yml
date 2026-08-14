@@ -1,0 +1,142 @@
+name: Trade
+
+# The scheduled trading run.
+#
+# Cron is UTC and has no concept of daylight saving, so each US market time
+# gets two entries — one for EDT (UTC-4) and one for EST (UTC-5). The run that
+# lands outside market hours is harmless: the engine reconciles against the
+# broker, finds nothing to do, and exits.
+#
+# GitHub's scheduler is best-effort and can be delayed by several minutes
+# under load. The strategy is built around daily bars precisely so that a late
+# run changes nothing material, and every open position is protected by a
+# resting stop at the broker rather than by this workflow being punctual.
+
+on:
+  schedule:
+    # Shortly after the US open: acts on signals from the previous close.
+    - cron: "40 13 * * 1-5"   # 09:40 ET during EDT
+    - cron: "40 14 * * 1-5"   # 09:40 ET during EST
+    # Late in the session: trails stops and takes exits before the close.
+    - cron: "40 19 * * 1-5"   # 15:40 ET during EDT
+    - cron: "40 20 * * 1-5"   # 15:40 ET during EST
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Execution mode for this run"
+        required: true
+        default: dry_run
+        type: choice
+        options: [dry_run, paper, live]
+      manual_override:
+        description: "Clear a tripped drawdown circuit breaker"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write  # the run commits updated state back to the repository
+
+# Two trading runs must never overlap. Without this, a delayed run could
+# submit orders while another is mid-flight and double a position.
+concurrency:
+  group: trading-bot-execution
+  cancel-in-progress: false
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: trading   # gates the IBKR secrets behind an environment
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate configuration
+        run: python -m bot.cli validate-config
+
+      - name: Resolve execution mode
+        id: mode
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+          # Repository variable, set under Settings → Secrets and variables →
+          # Actions → Variables. Live trading is deliberately controlled here
+          # rather than in config.yaml: flipping it is a separate, logged
+          # action outside the code review path, and a stray commit to a
+          # committed file can never start trading real money by itself.
+          SCHEDULED_MODE: ${{ vars.SCHEDULED_EXECUTION_MODE }}
+        run: |
+          set -euo pipefail
+          if [ -n "$DISPATCH_MODE" ]; then
+            MODE="$DISPATCH_MODE"          # a human chose this run's mode
+          else
+            MODE="${SCHEDULED_MODE:-dry_run}"
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "Running in '$MODE' mode."
+
+      - name: Run the bot
+        env:
+          BOT_EXECUTION_MODE: ${{ steps.mode.outputs.mode }}
+          BOT_MANUAL_OVERRIDE: ${{ inputs.manual_override }}
+          IBKR_ACCOUNT_ID: ${{ secrets.IBKR_ACCOUNT_ID }}
+          IBKR_CONSUMER_KEY: ${{ secrets.IBKR_CONSUMER_KEY }}
+          IBKR_ACCESS_TOKEN: ${{ secrets.IBKR_ACCESS_TOKEN }}
+          IBKR_ACCESS_TOKEN_SECRET: ${{ secrets.IBKR_ACCESS_TOKEN_SECRET }}
+          IBKR_DH_PRIME: ${{ secrets.IBKR_DH_PRIME }}
+          IBKR_SIGNATURE_KEY: ${{ secrets.IBKR_SIGNATURE_KEY }}
+          IBKR_ENCRYPTION_KEY: ${{ secrets.IBKR_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          # The CLI refuses live mode without this flag, so that running the
+          # bot by hand can never place real orders by accident. Here the mode
+          # has already been resolved from an explicit setting, so the
+          # confirmation is genuine rather than a rubber stamp.
+          if [ "$BOT_EXECUTION_MODE" = "live" ]; then
+            python -m bot.cli run --i-understand-this-is-live
+          else
+            python -m bot.cli run
+          fi
+
+      - name: Commit updated state
+        # State is committed so the next run — on a brand new container —
+        # knows the equity high-water mark, when each position was opened, and
+        # where its trailing stop sits.
+        if: always()
+        run: |
+          set -euo pipefail
+          git config user.name  "trading-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add state/ || true
+          if git diff --staged --quiet; then
+            echo "No state change to commit."
+            exit 0
+          fi
+          git commit -m "state: run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # The scheduler can start a run while another has just pushed, so
+          # rebase before pushing rather than failing the run over it.
+          for attempt in 1 2 3 4; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && \
+               git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "State pushed."
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; retrying."
+            sleep $((2 ** attempt))
+          done
+          echo "::warning::Could not push state. The next run will rebuild it from the broker."
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-log-${{ github.run_id }}
+          path: state/logs/
+          retention-days: 14

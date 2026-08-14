@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "note": "Runtime state, rewritten by each scheduled run."
+}

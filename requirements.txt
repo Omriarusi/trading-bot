@@ -1,0 +1,10 @@
+# Core runtime.
+pandas>=2.2,<4
+numpy>=1.26,<3
+PyYAML>=6.0,<7
+requests>=2.31,<3
+
+# IBKR Client Portal Web API client. The [oauth] extra pulls in the crypto
+# needed for OAuth 1.0a, which is what allows fully headless authentication —
+# no TWS and no IB Gateway process.
+ibind[oauth]>=0.1.14

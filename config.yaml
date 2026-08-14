@@ -1,0 +1,167 @@
+# =====================================================================
+# Trading bot configuration.
+#
+# Every number that controls risk lives here, not in the code. Change a
+# value, commit it, and the next scheduled run picks it up.
+#
+# Sanity-check any edit with:  python -m bot.cli validate-config
+# =====================================================================
+
+account:
+  # IBKR legal entity carrying the account. "IBIE" (Ireland) is subject to
+  # PRIIPs, which blocks US-domiciled ETFs, so the universe is single stocks.
+  # Verify with: python -m bot.cli check-account
+  entity: IBIE
+
+  # "cash" or "margin". A cash account cannot short and must respect T+1
+  # settlement; the engine enforces both when this is "cash".
+  type: cash
+
+  base_currency: USD
+
+  # Starting equity, only used before the broker reports a real value.
+  assumed_equity: 1400.0
+
+
+execution:
+  # "paper" runs against IBKR's paper account. "live" trades real money.
+  # "dry_run" computes and logs orders without sending anything.
+  mode: dry_run
+
+  # Refuse to send an order whose notional exceeds this. A backstop against
+  # a sizing bug emptying the account in one trade.
+  max_order_notional: 500.0
+
+  # Orders are limit orders priced this far through the touch, so they fill
+  # like market orders but can never fill at an absurd price after a gap.
+  marketable_limit_offset_pct: 0.30
+
+  # Reject a fill price that differs from the decision price by more than
+  # this. Protects against acting on stale data.
+  max_slippage_pct: 1.5
+
+
+costs:
+  # IBKR tiered US stock pricing. Used by the backtester and by the
+  # minimum-position-size check so commission stays a small share of the trade.
+  commission_per_share: 0.0035
+  commission_min: 0.35
+  commission_max_pct_of_trade: 1.0
+
+  # Modelled one-way slippage for backtests, in basis points.
+  slippage_bps: 5.0
+
+
+risk:
+  # Fraction of equity risked per position, where "risk" is the distance
+  # from entry to the stop. 0.02 = a stop-out costs 2% of the account.
+  risk_per_trade_pct: 2.0
+
+  # Hard ceiling on any single position as a share of equity.
+  max_position_pct: 30.0
+
+  # Below this notional, commission is too large a drag to be worth trading.
+  min_position_notional: 250.0
+
+  max_concurrent_positions: 4
+
+  # Total invested capital as a share of equity. Above 100 requires margin.
+  max_gross_exposure_pct: 95.0
+
+  # Initial stop distance, in multiples of 20-day ATR.
+  atr_stop_multiple: 2.5
+
+  # Trail the stop by this ATR multiple once the trade is profitable.
+  atr_trail_multiple: 3.0
+
+  # Close a position that has gone nowhere after this many trading days.
+  max_holding_days: 12
+
+
+circuit_breakers:
+  # Stop opening new positions for the rest of the day after this daily loss.
+  daily_loss_halt_pct: 6.0
+
+  # Halt all trading until manually re-enabled after this drawdown from the
+  # equity peak. Existing stops stay live at the broker.
+  max_drawdown_halt_pct: 25.0
+
+  # Refuse to trade if the price data is older than this many days, which
+  # usually means the data source is broken rather than the market is closed.
+  max_data_staleness_days: 5
+
+  # Once tripped, max_drawdown_halt requires setting this to true to resume.
+  manual_override: false
+
+
+regime:
+  # Portfolio-level gate. New longs are only opened in a risk-on regime.
+  # SPY is used purely as a signal; it is never traded (PRIIPs).
+  benchmark: SPY
+  trend_ma_days: 200
+
+  # Block new entries when the benchmark's realised volatility is in the top
+  # decile of its own history. Crash regimes break mean-reversion strategies.
+  vol_lookback_days: 10
+  vol_percentile_block: 90
+
+  # In a risk-off regime: "hold" keeps existing positions under their stops,
+  # "flatten" closes everything.
+  risk_off_action: hold
+
+
+strategy:
+  # Pullback-within-an-uptrend. The long-term filter keeps us on the right
+  # side of the trend; the short-term oversold trigger buys weakness rather
+  # than chasing strength, which matters when commission is 0.3% a side.
+  name: trend_pullback
+
+  # --- Trend filter: all must pass for a stock to be a candidate ---
+  trend_ma_days: 200
+  momentum_lookback_days: 126
+  min_momentum_pct: 0.0
+
+  # --- Entry trigger ---
+  rsi_period: 3
+  rsi_entry_max: 25.0
+
+  # --- Exit ---
+  exit_ma_days: 10
+  rsi_exit_min: 70.0
+
+  # Rank competing candidates by this. "most_oversold" takes the deepest
+  # pullbacks; "momentum" takes the strongest trends.
+  ranking: most_oversold
+
+
+universe:
+  # Liquidity filters, applied daily. A small account cannot afford to be in
+  # anything thin: the spread costs more than the edge.
+  min_price: 5.0
+  max_price: 400.0
+  min_avg_dollar_volume: 50000000
+  adv_lookback_days: 20
+
+  # Never take more than this share of a day's volume.
+  max_pct_of_adv: 1.0
+
+  # Skip a stock with earnings within this many days. Earnings gaps jump
+  # straight through stops and are the main way this strategy loses badly.
+  earnings_blackout_days: 3
+
+  # Explicit ticker list lives in bot/universe_list.py so it is reviewable
+  # in diffs rather than buried in config.
+  list_name: liquid_us_large_cap
+
+
+data:
+  # Priority order. The engine falls through to the next source on failure.
+  sources: [stooq, yahoo]
+  history_days: 400
+  cache_dir: .cache/prices
+
+
+notifications:
+  # Written to the Actions run summary and committed to state/ as a log.
+  write_run_summary: true
+  log_dir: state/logs

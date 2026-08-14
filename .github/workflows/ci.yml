@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Validate configuration
+        # The committed config must be loadable and pass every safety check.
+        # A config that fails here would halt the bot at its next scheduled run.
+        run: python -m bot.cli validate-config
+
+      - name: Lint
+        run: ruff check bot backtest tests
+
+      - name: Test
+        run: pytest -q --cov=bot --cov=backtest --cov-report=term-missing
+
+      - name: Check that no credential is committed
+        # A defence in depth against pasting a key into config.yaml while
+        # debugging. Secrets belong only in GitHub Secrets.
+        run: |
+          if grep -rInE "(BEGIN [A-Z ]*PRIVATE KEY|IBKR_ACCESS_TOKEN_SECRET *[:=] *['\"]?[A-Za-z0-9]{8})" \
+              --include="*.py" --include="*.yaml" --include="*.yml" --include="*.json" \
+              --exclude-dir=.git . ; then
+            echo "::error::A credential appears to be committed. Remove it and rotate the key."
+            exit 1
+          fi
+          echo "No credentials found in tracked files."

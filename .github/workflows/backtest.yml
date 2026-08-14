@@ -1,0 +1,86 @@
+name: Backtest
+
+# Runs the strategy over real historical data. Kept manual rather than
+# scheduled: a backtest is something you read and act on, not a metric to
+# accumulate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Start date (YYYY-MM-DD). Leave blank for all available history."
+        required: false
+      end:
+        description: "End date (YYYY-MM-DD)"
+        required: false
+      years:
+        description: "Years of history to fetch"
+        required: false
+        default: "8"
+      equity:
+        description: "Starting equity"
+        required: false
+        default: "1400"
+      universe:
+        description: "Universe: liquid_us_large_cap, high_beta_us, or blended"
+        required: false
+        default: "blended"
+      risk_per_trade:
+        description: "Override risk %% per trade (blank uses config.yaml)"
+        required: false
+      max_positions:
+        description: "Override concurrent position cap"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run backtest
+        env:
+          # Passed through the environment rather than interpolated into the
+          # shell, so an odd input value cannot become part of the command.
+          IN_START: ${{ inputs.start }}
+          IN_END: ${{ inputs.end }}
+          IN_YEARS: ${{ inputs.years }}
+          IN_EQUITY: ${{ inputs.equity }}
+          IN_UNIVERSE: ${{ inputs.universe }}
+          IN_RISK: ${{ inputs.risk_per_trade }}
+          IN_MAXPOS: ${{ inputs.max_positions }}
+        run: |
+          set -euo pipefail
+          mkdir -p results
+
+          ARGS=()
+          if [ -n "$IN_START" ];    then ARGS+=(--start "$IN_START"); fi
+          if [ -n "$IN_END" ];      then ARGS+=(--end "$IN_END"); fi
+          if [ -n "$IN_YEARS" ];    then ARGS+=(--years "$IN_YEARS"); fi
+          if [ -n "$IN_EQUITY" ];   then ARGS+=(--equity "$IN_EQUITY"); fi
+          if [ -n "$IN_UNIVERSE" ]; then ARGS+=(--universe "$IN_UNIVERSE"); fi
+          if [ -n "$IN_RISK" ];     then ARGS+=(--risk-per-trade "$IN_RISK"); fi
+          if [ -n "$IN_MAXPOS" ];   then ARGS+=(--max-positions "$IN_MAXPOS"); fi
+
+          python -m bot.cli backtest "${ARGS[@]}" --json-out results/stats.json \
+            | tee results/report.md
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-results
+          path: results/
+          retention-days: 30
