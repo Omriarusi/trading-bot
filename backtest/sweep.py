@@ -129,6 +129,97 @@ def run_sweep(
     return results
 
 
+def run_split_sweep(
+    cfg: Config,
+    bars: dict[str, pd.DataFrame],
+    benchmark: pd.DataFrame,
+    starting_equity: float,
+    start: date | None = None,
+    end: date | None = None,
+) -> dict[str, list[tuple[Variant, dict]]]:
+    """Run the sweep over the full period and over each half separately.
+
+    This is the check that decides whether a variant's advantage is real.
+    Choosing the best of six variants on one sample will always produce a
+    winner, whether or not any of them has an edge — so the question is not
+    "which scored highest" but "did the same one score highest in both
+    halves". A variant that wins the first half and loses the second was
+    fitted to the first half.
+
+    The split is a single chronological cut rather than a random one:
+    randomly interleaving days would let a variant learn from the future,
+    which is exactly what this is meant to detect.
+    """
+    index = benchmark.index
+    first_day = pd.Timestamp(start) if start else index[0]
+    last_day = pd.Timestamp(end) if end else index[-1]
+    midpoint = index[(index >= first_day) & (index <= last_day)]
+    if len(midpoint) < 4:
+        raise ValueError("not enough history to split into two periods")
+    cut = midpoint[len(midpoint) // 2]
+
+    log.info(
+        "split: %s..%s then %s..%s",
+        first_day.date(), cut.date(), cut.date(), last_day.date(),
+    )
+
+    return {
+        "full": run_sweep(cfg, bars, benchmark, starting_equity, first_day.date(), last_day.date()),
+        "first_half": run_sweep(cfg, bars, benchmark, starting_equity, first_day.date(), cut.date()),
+        "second_half": run_sweep(cfg, bars, benchmark, starting_equity, cut.date(), last_day.date()),
+    }
+
+
+def render_split(periods: dict[str, list[tuple[Variant, dict]]]) -> str:
+    """Report each variant's rank in both halves, and flag the unstable ones."""
+    lines = [
+        "# Out-of-sample check",
+        "",
+        "Picking the best of six variants on a single sample always produces a "
+        "winner, edge or no edge. What matters is whether the same variant wins "
+        "in both halves of the history. One that wins the first half and loses "
+        "the second was fitted to the first half.",
+        "",
+        "| Variant | Full CAGR | 1st half CAGR | 2nd half CAGR | 1st DD | 2nd DD | Consistent |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | :---: |",
+    ]
+
+    def by_name(results: list[tuple[Variant, dict]]) -> dict[str, dict]:
+        return {v.name: s for v, s in results}
+
+    full = by_name(periods["full"])
+    first = by_name(periods["first_half"])
+    second = by_name(periods["second_half"])
+
+    for variant in VARIANTS:
+        f, a, b = (
+            full.get(variant.name, {}),
+            first.get(variant.name, {}),
+            second.get(variant.name, {}),
+        )
+        if any("error" in d or not d for d in (f, a, b)):
+            lines.append(f"| `{variant.name}` | — | — | — | — | — | n/a |")
+            continue
+
+        # "Consistent" means profitable in both halves, not merely on average.
+        # A variant carried entirely by one good stretch is not a strategy.
+        consistent = a["cagr_pct"] > 0 and b["cagr_pct"] > 0
+        lines.append(
+            f"| `{variant.name}` | {f['cagr_pct']:+.1f}% | {a['cagr_pct']:+.1f}% "
+            f"| {b['cagr_pct']:+.1f}% | {a['max_drawdown_pct']:.1f}% "
+            f"| {b['max_drawdown_pct']:.1f}% | {'yes' if consistent else 'NO'} |"
+        )
+
+    lines += [
+        "",
+        "_A variant marked `NO` lost money in one of the two halves. Whatever "
+        "its full-period figure says, it has not shown that it works in more "
+        "than one market._",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def render_sweep(results: list[tuple[Variant, dict]]) -> str:
     """Format the comparison, ranked by risk-adjusted return."""
     lines = [

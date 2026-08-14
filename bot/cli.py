@@ -264,7 +264,7 @@ def cmd_backtest(args) -> int:
 
 def cmd_sweep(args) -> int:
     """Backtest several pre-registered strategy variants over identical data."""
-    from backtest.sweep import render_sweep, run_sweep
+    from backtest.sweep import render_split, render_sweep, run_split_sweep
     from bot.data import PriceRepository
     from bot.universe_list import get_universe
 
@@ -284,7 +284,7 @@ def cmd_sweep(args) -> int:
         log.warning("%d symbol(s) unavailable", len(failures))
 
     benchmark = repository.get(cfg.regime.benchmark)
-    results = run_sweep(
+    periods = run_split_sweep(
         cfg,
         {s: b.frame for s, b in bars.items()},
         benchmark.frame,
@@ -293,7 +293,9 @@ def cmd_sweep(args) -> int:
         end=_parse_date(args.end),
     )
 
-    report = render_sweep(results)
+    # The out-of-sample check comes first: it decides whether the full-period
+    # ranking below is worth reading at all.
+    report = render_split(periods) + "\n" + render_sweep(periods["full"])
     print(report)
     _write_step_summary(report)
 
@@ -302,7 +304,12 @@ def cmd_sweep(args) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(
-                {v.name: stats for v, stats in results}, indent=2, sort_keys=True
+                {
+                    period: {v.name: stats for v, stats in results}
+                    for period, results in periods.items()
+                },
+                indent=2,
+                sort_keys=True,
             )
             + "\n"
         )
