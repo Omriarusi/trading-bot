@@ -33,6 +33,23 @@ class Variant:
     apply: object  # Callable[[Config], Config]
 
 
+def _original_baseline() -> Config:
+    """The strategy exactly as first implemented, pinned regardless of config.yaml.
+
+    Once `combined` was adopted into the committed config, deriving these
+    variants from the *loaded* config rather than from this fixed reference
+    silently collapsed several of them into identical configurations: the
+    first sweep run after adoption produced byte-identical results — the
+    same 483 trades, the same $338 of commission — for baseline, winners_run,
+    fewer_bigger, selective, and combined, because every one of those
+    variants' changes was already present in the file being mutated.
+    Re-applying a no-op change is still a no-op. Pinning to a fixed reference
+    keeps the historical comparison meaningful no matter what is currently
+    committed.
+    """
+    return Config()
+
+
 def _let_winners_run(cfg: Config) -> Config:
     """Hand the exit to the trailing stop instead of the moving-average target.
 
@@ -142,18 +159,30 @@ def _combined_quiet(cfg: Config) -> Config:
 
 
 VARIANTS: tuple[Variant, ...] = (
-    Variant("baseline", "current committed configuration", lambda c: c),
-    Variant("winners_run", "trailing stop exit instead of the MA target", _let_winners_run),
-    Variant("fewer_bigger", "3 larger positions to cut commission drag", _fewer_bigger_positions),
-    Variant("selective", "deeper pullback and stronger trend required", _more_selective),
-    Variant("combined", "winners_run + fewer_bigger + selective", _combined),
-    Variant("combined_hot", "combined, sized at 3.5% risk per trade", _higher_risk),
-    # Requested changes, tested against the adopted strategy rather than
-    # against the original baseline, so the comparison isolates the change.
-    Variant("ma50", "trend judged on a 50-day average, alone", _trend_ma_50),
-    Variant("combined_ma50", "adopted strategy, 50-day trend filter", _combined_ma50),
-    Variant("combined_capitulation", "adopted strategy, volume >= 1.5x average", _combined_capitulation),
-    Variant("combined_quiet", "adopted strategy, volume <= 1.0x average", _combined_quiet),
+    # Fixed historical progression: each ignores the config passed in and
+    # starts from _original_baseline(), so this group stays a stable
+    # reference point no matter what config.yaml currently trades.
+    Variant("baseline", "the original strategy (fixed, ignores config.yaml)",
+            lambda c: _original_baseline()),
+    Variant("winners_run", "trailing stop exit instead of the MA target",
+            lambda c: _let_winners_run(_original_baseline())),
+    Variant("fewer_bigger", "3 larger positions to cut commission drag",
+            lambda c: _fewer_bigger_positions(_original_baseline())),
+    Variant("selective", "deeper pullback and stronger trend required",
+            lambda c: _more_selective(_original_baseline())),
+    Variant("combined", "winners_run + fewer_bigger + selective",
+            lambda c: _combined(_original_baseline())),
+    Variant("combined_hot", "combined, sized at 3.5% risk per trade",
+            lambda c: _higher_risk(_original_baseline())),
+    Variant("ma50", "trend judged on a 50-day average, alone (vs. the original baseline)",
+            lambda c: _trend_ma_50(_original_baseline())),
+    # Requested changes, tested against whatever config.yaml currently
+    # trades — these three intentionally use the passed-in cfg, so they
+    # track "the adopted strategy plus this one change" even as the
+    # adopted strategy itself changes over time.
+    Variant("combined_ma50", "currently adopted strategy, 50-day trend filter", _combined_ma50),
+    Variant("combined_capitulation", "currently adopted strategy, volume >= 1.5x average", _combined_capitulation),
+    Variant("combined_quiet", "currently adopted strategy, volume <= 1.0x average", _combined_quiet),
 )
 
 

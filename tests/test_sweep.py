@@ -6,6 +6,8 @@ possibly adopted, without the config validator ever seeing it.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 import bot.config as config_module
@@ -82,3 +84,39 @@ def test_split_tolerates_a_failed_variant():
         "second_half": [(VARIANTS[0], {"error": "boom"})],
     })
     assert "n/a" in output
+
+
+def test_historical_variants_are_immune_to_config_drift():
+    """Once config.yaml matches `combined`, sweeping from it must not
+    silently collapse the historical variants into identical configs.
+
+    This is exactly the bug that shipped once: after `combined` was adopted
+    into the committed config, baseline, winners_run, fewer_bigger,
+    selective, and combined all produced byte-identical backtest results —
+    re-applying an already-present change is a no-op. Passing an
+    already-adopted config here reproduces that scenario; each variant must
+    still differ from the others.
+    """
+    already_adopted = {v.name: v for v in VARIANTS}["combined"].apply(Config())
+
+    resolved = {v.name: v.apply(already_adopted) for v in VARIANTS}
+    distinct_strategies = {resolved[name].strategy for name in
+                            ("baseline", "winners_run", "fewer_bigger", "selective", "combined")}
+    assert len(distinct_strategies) > 1, "historical variants collapsed to one configuration"
+
+    # Specifically: baseline must still be the original, untouched strategy.
+    assert resolved["baseline"].strategy.rsi_entry_max == Config().strategy.rsi_entry_max
+    assert resolved["baseline"].risk.max_concurrent_positions == Config().risk.max_concurrent_positions
+
+
+def test_combined_relative_variants_still_track_the_loaded_config():
+    """The three requested-change variants must respond to what is loaded.
+
+    Unlike the historical group, these intentionally track "the adopted
+    strategy plus one change" — if the adopted strategy's risk settings ever
+    move, these should move with it rather than silently reverting to the
+    original baseline.
+    """
+    hypothetically_adopted = replace(Config(), risk=replace(Config().risk, risk_per_trade_pct=9.0))
+    resolved = {v.name: v for v in VARIANTS}["combined_ma50"].apply(hypothetically_adopted)
+    assert resolved.risk.risk_per_trade_pct == 9.0
