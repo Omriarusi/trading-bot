@@ -105,6 +105,29 @@ backtest/          replays the strategy over history
 The backtester calls the same `signals.py` and `risk.py` the live engine does.
 A backtest of a reimplementation measures the reimplementation.
 
+## Measured results
+
+2017–2026, 187 US single stocks, $1,400 start, commission and slippage charged
+on every fill:
+
+| | Strategy | Buy-and-hold |
+| --- | ---: | ---: |
+| Total return | +158.6% | +272.8% |
+| CAGR | +10.9% | ~+15.4% |
+| **Max drawdown** | **−15.9%** | **−33.7%** |
+| Sharpe | 0.88 | — |
+| Calmar | 0.68 | ~0.46 |
+
+**It underperforms buy-and-hold on raw return and beats it on risk-adjusted
+return.** Roughly half the drawdown for roughly two-thirds of the gain. Run it
+because you want the shallower drawdown, not because you expect to beat the
+market — and note that an IBIE account *can* buy a UCITS index fund (CSPX,
+VUAA), so buy-and-hold is a real alternative, not a hypothetical one.
+
+The first version of this strategy returned only +45%, with commission eating
+119% of net profit. What fixed it, what failed, and why, is written up in
+**[docs/STRATEGY.md](docs/STRATEGY.md)**.
+
 ## What this cannot do
 
 It cannot promise a profit. High risk means high variance in *both* directions:
@@ -113,10 +136,11 @@ account. The strategy is a well-documented, widely-used pattern with no secret
 edge — its value is in being executed consistently and with fixed risk, not in
 being clever.
 
-Read the backtest's drawdown before its return. Backtests overstate live
-results: they assume every intended fill happened, and the universe is today's
-liquid names, which quietly excludes companies that were liquid then and are
-not now.
+Read the drawdown before the return. Backtests overstate live results: they
+assume every intended fill happened, and the universe is today's liquid names,
+which quietly excludes companies that were liquid then and are not now. Nine
+years is also one sample — it contains a single crash, a single bear market,
+and a long bull run.
 
 ## Disclaimer
 
