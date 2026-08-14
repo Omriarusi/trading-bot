@@ -60,9 +60,13 @@ jobs:
         run: pip install -r requirements.txt
 
       # Each run starts on a fresh container, so without this every run
-      # re-downloads the whole universe. The key is the current date, so the
-      # cache is rebuilt daily and a run can never act on yesterday's prices;
-      # the repository additionally refuses any cache entry over six hours old.
+      # re-downloads the whole universe.
+      #
+      # The key is unique per run, so each run saves its own entry and the
+      # restore-keys prefix pulls in the most recent previous one. Freshness is
+      # not the cache's job: the repository refuses any cached file older than
+      # six hours, so a restored entry from an earlier session is simply
+      # ignored and refetched rather than traded on.
       - name: Restore price cache
         uses: actions/cache@v4
         with:
