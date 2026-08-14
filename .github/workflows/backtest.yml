@@ -5,6 +5,18 @@ name: Backtest
 # accumulate.
 
 on:
+  # Any change to the strategy, its costs, or its risk limits re-runs the
+  # backtest, so the effect of a tuning change is visible in the same place
+  # the change was made rather than having to be remembered separately.
+  push:
+    paths:
+      - "bot/signals.py"
+      - "bot/indicators.py"
+      - "bot/risk.py"
+      - "bot/universe_list.py"
+      - "backtest/**"
+      - "config.yaml"
+      - ".github/workflows/backtest.yml"
   workflow_dispatch:
     inputs:
       start:
@@ -64,6 +76,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p results
+
+          # workflow_dispatch input defaults do not apply to a push event, so
+          # a push-triggered run would otherwise fall back to config.yaml's
+          # history window, which is sized for live trading rather than for
+          # evaluating a strategy. Fill in the evaluation defaults here.
+          IN_YEARS="${IN_YEARS:-10}"
+          IN_EQUITY="${IN_EQUITY:-1400}"
+          IN_UNIVERSE="${IN_UNIVERSE:-blended}"
 
           ARGS=()
           if [ -n "$IN_START" ];    then ARGS+=(--start "$IN_START"); fi
