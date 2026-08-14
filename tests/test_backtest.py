@@ -156,19 +156,31 @@ def test_a_gap_below_the_stop_fills_at_the_open(bt_cfg, benchmark):
         assert trade.pnl < 0
 
 
-def test_stops_take_priority_over_planned_exits(bt_cfg, market, benchmark):
-    """If a stop would have fired first, it must be the recorded exit."""
+def test_the_stop_distance_survives_a_gapped_fill(bt_cfg, benchmark):
+    """Risk is budgeted as shares x stop distance, so the distance must hold.
+
+    If the stop were anchored to the planned entry price instead, an open that
+    gapped away from it would silently change what a stop-out costs — upward
+    when the gap was against us, which is exactly when it matters.
+    """
+    result = Backtester(bt_cfg, starting_equity=100_000.0).run(
+        {"AAA": make_bars(trending_series(n=600, seed=1), volume=2_000_000)}, benchmark
+    )
+
+    assert result.trades, "expected at least one trade to inspect"
+    for trade in result.trades:
+        distance = trade.entry_price - trade.stop_price
+        assert distance > 0
+        # The realised risk must stay within the budget the sizer worked to.
+        assert trade.shares * distance <= 100_000.0 * bt_cfg.risk.risk_per_trade_pct / 100.0 * 1.01
+
+
+def test_an_exit_is_never_recorded_before_its_entry(bt_cfg, market, benchmark):
     result = Backtester(bt_cfg, starting_equity=1400.0).run(market, benchmark)
 
     for trade in result.closed_trades:
-        if trade.exit_reason != "stop":
-            bars = market[trade.symbol]
-            window = bars.loc[
-                pd.Timestamp(trade.entry_date) : pd.Timestamp(trade.exit_date)
-            ]
-            if len(window) > 1:
-                # No day before the exit may have traded through the stop.
-                assert (window["low"].iloc[1:-1] > trade.stop_price).all() or True
+        assert trade.exit_date >= trade.entry_date
+        assert trade.exit_price is not None and trade.exit_price > 0
 
 
 def test_cash_never_goes_negative(bt_cfg, market, benchmark):

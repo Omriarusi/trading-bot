@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import io
 import logging
+import threading
 import time
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -32,6 +34,10 @@ OHLCV_COLUMNS = ["open", "high", "low", "close", "volume"]
 _REQUEST_TIMEOUT = 20
 _RETRY_DELAYS = (1.0, 3.0, 7.0)
 _USER_AGENT = "Mozilla/5.0 (compatible; trading-bot/1.0)"
+
+# Concurrent fetches. Enough to hide network latency across a ~170 symbol
+# universe, small enough to stay a well-behaved client of a free endpoint.
+_MAX_FETCH_WORKERS = 8
 
 
 class DataError(RuntimeError):
@@ -268,16 +274,22 @@ class PriceRepository:
                 f"No usable data sources in {cfg.sources}; known: {sorted(SOURCES)}"
             )
         self._memo: dict[str, Bars] = {}
+        # get() is called from several threads by get_many(). The lock guards
+        # the memo; the worst a race would cost is a duplicate HTTP request,
+        # but duplicating requests is exactly what annoys a throttled endpoint.
+        self._lock = threading.Lock()
 
     def get(self, symbol: str, use_cache: bool = True) -> Bars:
         """Fetch one symbol, trying each source in order."""
-        if symbol in self._memo:
-            return self._memo[symbol]
+        with self._lock:
+            if symbol in self._memo:
+                return self._memo[symbol]
 
         if use_cache:
             cached = self._read_cache(symbol)
             if cached is not None:
-                self._memo[symbol] = cached
+                with self._lock:
+                    self._memo[symbol] = cached
                 return cached
 
         errors: list[str] = []
@@ -287,7 +299,8 @@ class PriceRepository:
                 frame = _validate_frame(symbol, raw)
                 bars = Bars(symbol=symbol, frame=frame, source=source.name)
                 self._write_cache(symbol, bars)
-                self._memo[symbol] = bars
+                with self._lock:
+                    self._memo[symbol] = bars
                 return bars
             except DataError as exc:
                 errors.append(f"{source.name}: {exc}")
@@ -301,15 +314,36 @@ class PriceRepository:
 
         A partial universe is a normal, tradable outcome. One delisted ticker
         must not stop the bot from managing the rest of the portfolio.
+
+        Fetched in parallel. Sequentially, a ~170 symbol universe takes long
+        enough that a scheduled run can miss its window entirely — and these
+        endpoints throttle, so the retry backoff compounds the delay. The pool
+        is deliberately small: enough to hide the latency, not enough to look
+        like abuse of a free service.
         """
         ok: dict[str, Bars] = {}
         failed: dict[str, str] = {}
-        for symbol in symbols:
-            try:
-                ok[symbol] = self.get(symbol, use_cache=use_cache)
-            except DataError as exc:
-                failed[symbol] = str(exc)
-                log.warning("data: %s", exc)
+        if not symbols:
+            return ok, failed
+
+        workers = min(_MAX_FETCH_WORKERS, len(symbols))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(self.get, symbol, use_cache): symbol for symbol in symbols
+            }
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    ok[symbol] = future.result()
+                except DataError as exc:
+                    failed[symbol] = str(exc)
+                    log.warning("data: %s", exc)
+                # A source raising something unexpected must not end the run.
+                except Exception as exc:
+                    failed[symbol] = f"unexpected {type(exc).__name__}: {exc}"
+                    log.warning("data: %s failed unexpectedly: %s", symbol, exc)
+
+        log.info("fetched %d/%d symbols", len(ok), len(symbols))
         return ok, failed
 
     def _cache_path(self, symbol: str) -> Path:

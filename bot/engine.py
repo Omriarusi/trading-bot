@@ -11,6 +11,8 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
+import pandas as pd
+
 from bot import risk, signals
 from bot.broker.base import Broker, BrokerError, BrokerState, Position
 from bot.config import Config, ExecutionMode, RiskOffAction
@@ -421,7 +423,9 @@ class Engine:
 
         last = features.iloc[-1]
         close = float(last["close"])
-        atr_value = float(last["atr"]) if last.get("atr") == last.get("atr") else 0.0
+        if pd.isna(last.get("atr")):
+            return
+        atr_value = float(last["atr"])
         if atr_value <= 0:
             return
 

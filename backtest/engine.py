@@ -261,11 +261,14 @@ class Backtester:
                 if cost > cash:
                     continue
 
-                # The stop travels with the actual fill, not the planned entry,
-                # so the risk taken matches the risk that was budgeted.
-                stop = signals.initial_stop_price(
-                    fill, (fill - sizing.stop_price) / self.cfg.risk.atr_stop_multiple, self.cfg
-                )
+                # The stop travels with the fill, keeping the *distance* the
+                # sizer budgeted rather than the price it happened to pick.
+                # Shares were chosen so that shares x distance equals the risk
+                # budget, so preserving the distance preserves the risk;
+                # anchoring the stop to the planned entry instead would silently
+                # change how much a stop-out costs whenever the open gapped.
+                stop_distance = sizing.entry_price - sizing.stop_price
+                stop = max(round(fill - stop_distance, 2), 0.01)
                 cash -= cost
                 trade = Trade(
                     symbol=sizing.symbol, entry_date=today_date, entry_price=fill,

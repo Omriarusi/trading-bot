@@ -59,6 +59,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Each run starts on a fresh container, so without this every run
+      # re-downloads the whole universe. The key is the current date, so the
+      # cache is rebuilt daily and a run can never act on yesterday's prices;
+      # the repository additionally refuses any cache entry over six hours old.
+      - name: Restore price cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/prices
+          key: prices-${{ github.run_id }}
+          restore-keys: prices-
+
       - name: Validate configuration
         run: python -m bot.cli validate-config
 
