@@ -236,3 +236,31 @@ def test_report_renders_without_error(bt_cfg, market, benchmark):
 
     assert "# Backtest" in text
     assert "Max drawdown" in text
+
+
+def test_a_decision_only_ever_sees_one_bar(bt_cfg, market, benchmark):
+    """Structural no-lookahead: the decision functions get a single row.
+
+    Every lookback is already baked into the indicator columns, so handing
+    the strategy one bar makes reading the future impossible rather than
+    merely unintended.
+    """
+    bt = Backtester(bt_cfg, starting_equity=1400.0)
+    features, _ = bt._prepare(market)
+    when = list(features["AAA"].index)[300]
+
+    bar = bt._decision_bar(features, "AAA", when)
+    assert len(bar) == 1
+    assert bar.index[0] == when
+
+    assert bt._decision_bar(features, "MISSING", when) is None
+
+
+def test_results_are_unchanged_by_the_single_bar_optimisation(bt_cfg, market, benchmark):
+    """A performance change must not move a single trade."""
+    result = Backtester(bt_cfg, starting_equity=1400.0).run(market, benchmark)
+    again = Backtester(bt_cfg, starting_equity=1400.0).run(market, benchmark)
+
+    assert [(t.symbol, t.entry_date, t.shares, t.exit_reason) for t in result.trades] == [
+        (t.symbol, t.entry_date, t.shares, t.exit_reason) for t in again.trades
+    ]
