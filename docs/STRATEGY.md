@@ -75,12 +75,12 @@ before its result was known, then run over identical data.
 
 | Variant | Return | Max DD | Sharpe | Calmar | Trades | PF | Comm/PnL |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `combined_hot` | +158.6% | -15.9% | 0.88 | 0.68 | 488 | 1.37 | 15% |
-| `combined` | +115.0% | -14.5% | 0.81 | 0.60 | 460 | 1.35 | 20% |
-| `winners_run` | +91.1% | -20.4% | 0.65 | 0.36 | 726 | 1.23 | 40% |
-| `selective` | +72.4% | -16.8% | 0.59 | 0.36 | 850 | 1.21 | 59% |
-| `baseline` | +45.4% | -23.4% | 0.39 | 0.18 | 1,078 | 1.11 | 119% |
-| `fewer_bigger` | -19.5% | -25.7% | -0.28 | -0.09 | 346 | 0.87 | 89% |
+| `combined_hot` | +158.5% | -15.9% | 0.88 | 0.68 | 488 | 1.37 | 15% |
+| **`combined`** | **+116.6%** | **-14.5%** | **0.82** | **0.60** | 459 | 1.36 | 20% |
+| `winners_run` | +90.1% | -20.4% | 0.64 | 0.35 | 725 | 1.22 | 40% |
+| `selective` | +72.6% | -16.8% | 0.59 | 0.36 | 849 | 1.21 | 59% |
+| `baseline` | +41.9% | -23.4% | 0.37 | 0.17 | 1,076 | 1.10 | 128% |
+| `fewer_bigger` | -14.4% | -25.1% | -0.22 | -0.07 | 256 | 0.87 | 89% |
 
 Both hypotheses were confirmed. Handing the exit to the trailing stop lifted
 the profit factor from 1.11 to 1.23; demanding a deeper pullback lifted it to

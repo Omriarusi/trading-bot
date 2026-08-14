@@ -260,3 +260,53 @@ def test_execution_mode_capabilities():
 def test_cash_accounts_cannot_short():
     assert not config_module.AccountConfig(type=AccountType.CASH).can_short
     assert config_module.AccountConfig(type=AccountType.MARGIN).can_short
+
+
+def test_committed_config_matches_the_adopted_variant():
+    """config.yaml must equal the variant that passed the out-of-sample check.
+
+    The published figures describe `combined`. If the committed config drifts
+    away from it, every number in the README and docs/STRATEGY.md silently
+    becomes a claim about a strategy that is no longer the one running.
+
+    Deliberately excludes execution.mode and the universe list, which are
+    operational choices rather than part of the strategy.
+    """
+    from dataclasses import replace
+
+    from backtest.sweep import VARIANTS
+
+    committed = config_module.load()
+    adopted = {v.name: v for v in VARIANTS}["combined"].apply(Config())
+
+    # Normalise the fields that are legitimately allowed to differ.
+    normalise = lambda c: replace(  # noqa: E731
+        c,
+        execution=replace(c.execution, mode=ExecutionMode.DRY_RUN),
+        universe=replace(c.universe, list_name="x"),
+        account=replace(c.account, entity="x"),
+    )
+
+    assert normalise(committed).risk == normalise(adopted).risk
+    assert normalise(committed).strategy == normalise(adopted).strategy
+    assert normalise(committed).execution == normalise(adopted).execution
+
+
+def test_the_adopted_variant_is_not_the_highest_scoring_one():
+    """Documents a deliberate choice that looks like a mistake.
+
+    `combined_hot` scored higher over the full period (+158.5% against
+    +116.6%) and was rejected: out of sample its drawdown more than doubled,
+    from -10.6% in the first half to -23.6% in the second, while its return
+    fell to +4.2%. `combined` held +7.6% at -11.6%. Anyone comparing the
+    committed config against the sweep table should find this test rather
+    than assume the ranking was misread.
+    """
+    from backtest.sweep import VARIANTS
+
+    names = [v.name for v in VARIANTS]
+    assert "combined" in names and "combined_hot" in names
+
+    hot = {v.name: v for v in VARIANTS}["combined_hot"].apply(Config())
+    committed = config_module.load()
+    assert committed.risk.risk_per_trade_pct < hot.risk.risk_per_trade_pct

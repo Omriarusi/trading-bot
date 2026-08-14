@@ -30,7 +30,7 @@ execution:
 
   # Refuse to send an order whose notional exceeds this. A backstop against
   # a sizing bug emptying the account in one trade.
-  max_order_notional: 500.0
+  max_order_notional: 650.0
 
   # Orders are limit orders priced this far through the touch, so they fill
   # like market orders but can never fill at an absurd price after a gap.
@@ -58,12 +58,12 @@ risk:
   risk_per_trade_pct: 2.0
 
   # Hard ceiling on any single position as a share of equity.
-  max_position_pct: 30.0
+  max_position_pct: 40.0
 
   # Below this notional, commission is too large a drag to be worth trading.
-  min_position_notional: 250.0
+  min_position_notional: 400.0
 
-  max_concurrent_positions: 4
+  max_concurrent_positions: 3
 
   # Total invested capital as a share of equity. Above 100 requires margin.
   max_gross_exposure_pct: 95.0
@@ -72,10 +72,10 @@ risk:
   atr_stop_multiple: 2.5
 
   # Trail the stop by this ATR multiple once the trade is profitable.
-  atr_trail_multiple: 3.0
+  atr_trail_multiple: 2.5
 
   # Close a position that has gone nowhere after this many trading days.
-  max_holding_days: 12
+  max_holding_days: 30
 
 
 circuit_breakers:
@@ -119,19 +119,28 @@ strategy:
   # --- Trend filter: all must pass for a stock to be a candidate ---
   trend_ma_days: 200
   momentum_lookback_days: 126
-  min_momentum_pct: 0.0
+  min_momentum_pct: 10.0
 
   # --- Entry trigger ---
   rsi_period: 3
-  rsi_entry_max: 25.0
+  rsi_entry_max: 15.0
 
   # --- Exit ---
   exit_ma_days: 10
-  rsi_exit_min: 70.0
+  rsi_exit_min: 80.0
 
   # Rank competing candidates by this. "most_oversold" takes the deepest
   # pullbacks; "momentum" takes the strongest trends.
   ranking: most_oversold
+
+  # Exit on a close back above the short moving average.
+  #
+  # Disabled. With it on, the strategy took +2.53% average wins against
+  # -3.81% average losses: it was right 62% of the time and still barely
+  # made money, because winners were cut within a day or two of a bounce
+  # while losers ran to the full stop. Off, the trailing stop decides,
+  # which also spreads a fixed commission over a larger move.
+  exit_on_ma_recross: false
 
 
 universe:
@@ -151,7 +160,11 @@ universe:
 
   # Explicit ticker list lives in bot/universe_list.py so it is reviewable
   # in diffs rather than buried in config.
-  list_name: liquid_us_large_cap
+  #
+  # "blended" is what every published figure was measured on. Trading a
+  # different universe than the one that was backtested makes the backtest
+  # a statement about some other strategy.
+  list_name: blended
 
 
 data:
