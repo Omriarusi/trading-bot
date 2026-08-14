@@ -60,9 +60,13 @@ jobs:
           # Push events receive no workflow_dispatch input defaults.
           IN_YEARS="${IN_YEARS:-10}"
           IN_EQUITY="${IN_EQUITY:-1400}"
-          IN_UNIVERSE="${IN_UNIVERSE:-blended}"
 
-          ARGS=(--years "$IN_YEARS" --equity "$IN_EQUITY" --universe "$IN_UNIVERSE")
+          ARGS=(--years "$IN_YEARS" --equity "$IN_EQUITY")
+          # No universe default. Left unset, the sweep measures whatever
+          # config.yaml trades, which is the thing worth knowing about. Forcing
+          # a default here silently benchmarked a universe the bot had already
+          # stopped trading.
+          if [ -n "$IN_UNIVERSE" ]; then ARGS+=(--universe "$IN_UNIVERSE"); fi
           if [ -n "$IN_START" ]; then ARGS+=(--start "$IN_START"); fi
           if [ -n "$IN_END" ];   then ARGS+=(--end "$IN_END"); fi
 
