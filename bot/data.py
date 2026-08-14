@@ -39,6 +39,11 @@ _USER_AGENT = "Mozilla/5.0 (compatible; trading-bot/1.0)"
 # universe, small enough to stay a well-behaved client of a free endpoint.
 _MAX_FETCH_WORKERS = 8
 
+# Consecutive failures after which a source is abandoned for the run. A
+# handful of bad tickers is normal; this many in a row means the provider
+# is down, and retrying every remaining symbol just burns the run window.
+_SOURCE_FAILURE_THRESHOLD = 12
+
 
 class DataError(RuntimeError):
     """Raised when price history cannot be obtained or fails validation."""
@@ -278,6 +283,7 @@ class PriceRepository:
         # the memo; the worst a race would cost is a duplicate HTTP request,
         # but duplicating requests is exactly what annoys a throttled endpoint.
         self._lock = threading.Lock()
+        self._consecutive_failures: dict[str, int] = {}
 
     def get(self, symbol: str, use_cache: bool = True) -> Bars:
         """Fetch one symbol, trying each source in order."""
@@ -294,6 +300,9 @@ class PriceRepository:
 
         errors: list[str] = []
         for source in self._sources:
+            if self._is_tripped(source.name):
+                errors.append(f"{source.name}: skipped, source marked down")
+                continue
             try:
                 raw = source.fetch(symbol, self.cfg.history_days)
                 frame = _validate_frame(symbol, raw)
@@ -301,13 +310,44 @@ class PriceRepository:
                 self._write_cache(symbol, bars)
                 with self._lock:
                     self._memo[symbol] = bars
+                    self._consecutive_failures[source.name] = 0
                 return bars
             except DataError as exc:
                 errors.append(f"{source.name}: {exc}")
+                self._record_failure(source.name)
             except Exception as exc:
                 errors.append(f"{source.name}: unexpected {type(exc).__name__}: {exc}")
+                self._record_failure(source.name)
 
         raise DataError(f"{symbol}: all sources failed ({'; '.join(errors)})")
+
+    def _record_failure(self, source_name: str) -> None:
+        """Count a failure, tripping the source's breaker at the threshold."""
+        with self._lock:
+            count = self._consecutive_failures.get(source_name, 0) + 1
+            self._consecutive_failures[source_name] = count
+            if count == _SOURCE_FAILURE_THRESHOLD:
+                log.error(
+                    "data source %r failed %d times in a row; skipping it for the "
+                    "rest of this run",
+                    source_name,
+                    count,
+                )
+
+    def _is_tripped(self, source_name: str) -> bool:
+        """Whether a source has been abandoned for this run.
+
+        Without this, a provider outage costs every symbol its full retry
+        budget. Across a ~170 symbol universe that is several minutes of
+        sleeping, which can consume the entire scheduled window and leave open
+        positions unmanaged. Failing fast preserves the time to do the part
+        that matters: reconcile with the broker and manage what is held.
+        """
+        with self._lock:
+            return (
+                self._consecutive_failures.get(source_name, 0)
+                >= _SOURCE_FAILURE_THRESHOLD
+            )
 
     def get_many(self, symbols: list[str], use_cache: bool = True) -> tuple[dict[str, Bars], dict[str, str]]:
         """Fetch many symbols, returning what succeeded and why the rest failed.
