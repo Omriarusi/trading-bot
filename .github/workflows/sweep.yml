@@ -15,9 +15,14 @@ on:
         required: false
         default: "1400"
       universe:
-        description: "liquid_us_large_cap, high_beta_us, or blended"
+        # No default here. workflow_dispatch fills an unset input with its
+        # own YAML default before the job ever sees it — a "blended" default
+        # here would silently override config.yaml on every manual run with
+        # no universe typed in, exactly as it did once. Leaving this blank
+        # lets ${{ inputs.universe }} come through empty, so the run step's
+        # own fallback (config.yaml's universe) actually takes effect.
+        description: "liquid_us_large_cap, high_beta_us, blended, or sp500 (blank = whatever config.yaml trades)"
         required: false
-        default: "blended"
       start:
         description: "Start date (YYYY-MM-DD), to test a specific regime"
         required: false
