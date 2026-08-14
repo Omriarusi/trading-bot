@@ -107,26 +107,31 @@ A backtest of a reimplementation measures the reimplementation.
 
 ## Measured results
 
-2017–2026, 187 US single stocks, $1,400 start, commission and slippage charged
-on every fill:
+2016–2026, S&P 500 (503 symbols), $1,400 start, commission and slippage
+charged on every fill:
 
 | | Strategy | Buy-and-hold |
 | --- | ---: | ---: |
-| Total return | +158.6% | +272.8% |
-| CAGR | +10.9% | ~+15.4% |
-| **Max drawdown** | **−15.9%** | **−33.7%** |
-| Sharpe | 0.88 | — |
-| Calmar | 0.68 | ~0.46 |
+| Total return | +78.6% | +271.8% |
+| CAGR | +6.5% | ~+14.0% |
+| **Max drawdown** | **−21.0%** | **−33.7%** |
+| Sharpe | 0.61 | — |
+| Calmar | 0.31 | ~0.42 |
 
-**It underperforms buy-and-hold on raw return and beats it on risk-adjusted
-return.** Roughly half the drawdown for roughly two-thirds of the gain. Run it
-because you want the shallower drawdown, not because you expect to beat the
-market — and note that an IBIE account *can* buy a UCITS index fund (CSPX,
+**It underperforms buy-and-hold on both raw and risk-adjusted return on this
+universe**, though its drawdown is meaningfully shallower. The picture is
+notably better on a broader universe that mixes in higher-beta names outside
+the index (Calmar 0.60 there, against 0.31 restricted to the S&P 500) — see
+`docs/STRATEGY.md` for that comparison. Run this strategy because you want a
+shallower drawdown than the index, not because you expect to beat it on
+return — and note that an IBIE account *can* buy a UCITS index fund (CSPX,
 VUAA), so buy-and-hold is a real alternative, not a hypothetical one.
 
-The first version of this strategy returned only +45%, with commission eating
-119% of net profit. What fixed it, what failed, and why, is written up in
-**[docs/STRATEGY.md](docs/STRATEGY.md)**.
+The original, untouched version of this strategy actually **loses money** on
+the S&P 500 alone (Calmar −0.01) and fails an out-of-sample check split
+across the ten-year history. What fixed it, what failed — including two
+specifically requested changes that were tested and rejected — is written up
+in **[docs/STRATEGY.md](docs/STRATEGY.md)**.
 
 ## What this cannot do
 
