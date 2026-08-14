@@ -95,6 +95,52 @@ def _higher_risk(cfg: Config) -> Config:
     return replace(cfg, risk=replace(cfg.risk, risk_per_trade_pct=3.5))
 
 
+def _trend_ma_50(cfg: Config) -> Config:
+    """Judge the trend on a 50-day average instead of a 200-day one.
+
+    A faster filter admits stocks that have only recently turned up, which
+    means more candidates and earlier entries. The cost is that a 50-day
+    average also turns down faster and whipsaws in choppy markets, so it
+    permits buying dips in names that are rolling over rather than pulling
+    back. Which effect dominates is an empirical question.
+    """
+    return replace(cfg, strategy=replace(cfg.strategy, trend_ma_days=50))
+
+
+def _volume_capitulation(cfg: Config) -> Config:
+    """Require the entry day to trade at least 1.5x its average volume.
+
+    The capitulation reading: heavy selling into a pullback means the sellers
+    are spending themselves, and the bounce is closer.
+    """
+    return replace(cfg, strategy=replace(cfg.strategy, min_volume_ratio=1.5))
+
+
+def _volume_quiet(cfg: Config) -> Config:
+    """Require the entry day to trade no more than its average volume.
+
+    The opposite reading, equally commonly held: a pullback nobody is panicking
+    about is an orderly one, and heavy volume on a down day is distribution
+    rather than exhaustion.
+    """
+    return replace(cfg, strategy=replace(cfg.strategy, max_volume_ratio=1.0))
+
+
+def _combined_ma50(cfg: Config) -> Config:
+    """The adopted strategy with the faster trend filter."""
+    return _trend_ma_50(_combined(cfg))
+
+
+def _combined_capitulation(cfg: Config) -> Config:
+    """The adopted strategy with the high-volume requirement."""
+    return _volume_capitulation(_combined(cfg))
+
+
+def _combined_quiet(cfg: Config) -> Config:
+    """The adopted strategy with the low-volume requirement."""
+    return _volume_quiet(_combined(cfg))
+
+
 VARIANTS: tuple[Variant, ...] = (
     Variant("baseline", "current committed configuration", lambda c: c),
     Variant("winners_run", "trailing stop exit instead of the MA target", _let_winners_run),
@@ -102,6 +148,12 @@ VARIANTS: tuple[Variant, ...] = (
     Variant("selective", "deeper pullback and stronger trend required", _more_selective),
     Variant("combined", "winners_run + fewer_bigger + selective", _combined),
     Variant("combined_hot", "combined, sized at 3.5% risk per trade", _higher_risk),
+    # Requested changes, tested against the adopted strategy rather than
+    # against the original baseline, so the comparison isolates the change.
+    Variant("ma50", "trend judged on a 50-day average, alone", _trend_ma_50),
+    Variant("combined_ma50", "adopted strategy, 50-day trend filter", _combined_ma50),
+    Variant("combined_capitulation", "adopted strategy, volume >= 1.5x average", _combined_capitulation),
+    Variant("combined_quiet", "adopted strategy, volume <= 1.0x average", _combined_quiet),
 )
 
 
@@ -163,11 +215,28 @@ def run_split_sweep(
         first_day.date(), cut.date(), cut.date(), last_day.date(),
     )
 
-    return {
-        "full": run_sweep(cfg, bars, benchmark, starting_equity, first_day.date(), last_day.date()),
-        "first_half": run_sweep(cfg, bars, benchmark, starting_equity, first_day.date(), cut.date()),
-        "second_half": run_sweep(cfg, bars, benchmark, starting_equity, cut.date(), last_day.date()),
+    ranges = {
+        "full": (first_day.date(), last_day.date()),
+        "first_half": (first_day.date(), cut.date()),
+        "second_half": (cut.date(), last_day.date()),
     }
+    periods: dict[str, list[tuple[Variant, dict]]] = {name: [] for name in ranges}
+
+    # One Backtester per variant, reused across all three ranges, so the
+    # indicator columns for a 500-symbol universe are computed once rather
+    # than three times.
+    for variant in VARIANTS:
+        log.info("running variant: %s", variant.name)
+        backtester = Backtester(variant.apply(cfg), starting_equity=starting_equity)
+        for name, (begin, finish) in ranges.items():
+            try:
+                result = backtester.run(bars, benchmark, start=begin, end=finish)
+                periods[name].append((variant, result.stats()))
+            except (ValueError, KeyError) as exc:
+                log.error("variant %s failed over %s: %s", variant.name, name, exc)
+                periods[name].append((variant, {"error": str(exc)}))
+
+    return periods
 
 
 def render_split(periods: dict[str, list[tuple[Variant, dict]]]) -> str:

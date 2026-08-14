@@ -146,6 +146,18 @@ class StrategyConfig:
     rsi_exit_min: float = 70.0
     ranking: Ranking = Ranking.MOST_OVERSOLD
 
+    # Volume confirmation, measured as the entry day's volume divided by its
+    # own trailing average. Both bounds are disabled at 0.
+    #
+    # The two directions are opposite trading theories and both are commonly
+    # held. High volume on a down day reads as capitulation — the sellers are
+    # exhausting themselves, so the bounce is near. Low volume reads as an
+    # orderly pullback that nobody is panicking about, so the uptrend is
+    # intact. Only measurement settles which, if either, pays here.
+    volume_ma_days: int = 20
+    min_volume_ratio: float = 0.0
+    max_volume_ratio: float = 0.0
+
     # Exit on a close back above the short moving average.
     #
     # This is the classic mean-reversion exit and it fires quickly, which
@@ -344,6 +356,17 @@ def _validate(cfg: Config) -> None:
             "account.type is 'cash'."
         )
 
+    if s.volume_ma_days < 2:
+        errors.append("strategy.volume_ma_days must be at least 2")
+    if s.min_volume_ratio < 0 or s.max_volume_ratio < 0:
+        errors.append("strategy volume ratio bounds cannot be negative")
+    if 0 < s.max_volume_ratio < s.min_volume_ratio:
+        errors.append(
+            f"strategy.max_volume_ratio ({s.max_volume_ratio}) is below "
+            f"min_volume_ratio ({s.min_volume_ratio}); no volume could satisfy "
+            "both, so the bot would never open a position."
+        )
+
     if not 0 < s.rsi_entry_max < 100:
         errors.append("strategy.rsi_entry_max must be in (0, 100)")
     if s.rsi_exit_min <= s.rsi_entry_max:
@@ -362,7 +385,12 @@ def _validate(cfg: Config) -> None:
         errors.append("universe.max_pct_of_adv must be in (0, 20]")
 
     # Indicators need enough history to warm up before the first signal.
-    warmup = max(s.trend_ma_days, s.momentum_lookback_days, cfg.regime.trend_ma_days)
+    warmup = max(
+        s.trend_ma_days,
+        s.momentum_lookback_days,
+        s.volume_ma_days,
+        cfg.regime.trend_ma_days,
+    )
     # Calendar days to trading days is roughly 252/365.
     trading_days = int(cfg.data.history_days * 252 / 365)
     if trading_days < warmup + 20:

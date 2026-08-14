@@ -186,6 +186,12 @@ class Backtester:
     def __init__(self, cfg: Config, starting_equity: float | None = None):
         self.cfg = cfg
         self.starting_equity = starting_equity or cfg.account.assumed_equity
+        # Indicator columns depend only on the config and the bars, both fixed
+        # for the life of this object. The out-of-sample check runs the same
+        # variant over three date ranges, so without this the same 500-symbol
+        # feature computation happens three times for no reason.
+        self._prepared: tuple[dict[str, pd.DataFrame], list[str]] | None = None
+        self._eligible: dict[pd.Timestamp, list[str]] | None = None
 
     def run(
         self,
@@ -194,11 +200,15 @@ class Backtester:
         start: date | None = None,
         end: date | None = None,
     ) -> BacktestResult:
-        features, skipped = self._prepare(bars)
+        if self._prepared is None:
+            self._prepared = self._prepare(bars)
+        features, skipped = self._prepared
         if not features:
             raise ValueError("No symbol had enough history to backtest")
 
-        eligible_by_date = self._eligible_by_date(features)
+        if self._eligible is None:
+            self._eligible = self._eligible_by_date(features)
+        eligible_by_date = self._eligible
         benchmark_features = self._prepare_benchmark(benchmark_bars)
         calendar = self._calendar(features, benchmark_features, start, end)
         if len(calendar) < 2:

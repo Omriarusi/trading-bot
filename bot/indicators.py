@@ -129,3 +129,17 @@ def dollar_volume(close: pd.Series, volume: pd.Series, window: int) -> pd.Series
     spread on a thin name costs more than the strategy's entire edge.
     """
     return (close * volume).rolling(window=window, min_periods=max(2, window // 2)).mean()
+
+
+def volume_ratio(volume: pd.Series, window: int) -> pd.Series:
+    """Volume as a multiple of its own trailing average.
+
+    Expressed as a ratio rather than a raw level so that one threshold means
+    the same thing across a universe spanning very different float sizes.
+    The average excludes the current bar, so a single enormous day cannot
+    dilute the baseline it is being measured against.
+    """
+    if window < 2:
+        raise ValueError(f"Volume window must be at least 2, got {window}")
+    baseline = volume.shift(1).rolling(window=window, min_periods=window).mean()
+    return (volume / baseline).where(baseline > 0)

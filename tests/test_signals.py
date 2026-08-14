@@ -289,3 +289,82 @@ def test_the_time_stop_still_applies_without_the_ma_target(cfg: Config):
     )
     features = signals.compute_features(make_bars(trending_series(n=400)), patient.strategy)
     assert signals.should_exit(features, patient, holding_days=patient.risk.max_holding_days) is ExitReason.TIME_STOP
+
+
+# ------------------------------------------------------------ volume filter
+
+
+def test_volume_filters_are_off_by_default(pullback_bars, liquid_cfg: Config):
+    """Zero means disabled, so existing behaviour is unchanged."""
+    assert liquid_cfg.strategy.min_volume_ratio == 0.0
+    assert liquid_cfg.strategy.max_volume_ratio == 0.0
+    features = signals.compute_features(pullback_bars, liquid_cfg.strategy)
+    assert isinstance(signals.screen_entry("TEST", features, liquid_cfg), EntryCandidate)
+
+
+def _with_final_volume(bars, multiple: float):
+    """Same bars, with the last day's volume scaled against its average."""
+    out = bars.copy()
+    out.iloc[-1, out.columns.get_loc("volume")] = float(out["volume"].iloc[0] * multiple)
+    return out
+
+
+def test_capitulation_filter_requires_heavy_volume(pullback_bars, liquid_cfg: Config):
+    cfg = replace(liquid_cfg, strategy=replace(liquid_cfg.strategy, min_volume_ratio=1.5))
+
+    quiet = signals.compute_features(_with_final_volume(pullback_bars, 0.8), cfg.strategy)
+    assert signals.screen_entry("TEST", quiet, cfg) is RejectReason.VOLUME_FILTER
+
+    heavy = signals.compute_features(_with_final_volume(pullback_bars, 3.0), cfg.strategy)
+    assert isinstance(signals.screen_entry("TEST", heavy, cfg), EntryCandidate)
+
+
+def test_quiet_filter_requires_light_volume(pullback_bars, liquid_cfg: Config):
+    """The opposite rule must reject exactly what the other one accepts."""
+    cfg = replace(liquid_cfg, strategy=replace(liquid_cfg.strategy, max_volume_ratio=1.0))
+
+    heavy = signals.compute_features(_with_final_volume(pullback_bars, 3.0), cfg.strategy)
+    assert signals.screen_entry("TEST", heavy, cfg) is RejectReason.VOLUME_FILTER
+
+    quiet = signals.compute_features(_with_final_volume(pullback_bars, 0.8), cfg.strategy)
+    assert isinstance(signals.screen_entry("TEST", quiet, cfg), EntryCandidate)
+
+
+def test_an_unknown_volume_ratio_is_rejected_when_the_filter_is_on(
+    pullback_bars, liquid_cfg: Config
+):
+    """A filter switched on deliberately must not be silently skipped.
+
+    Uses a setup that passes every other filter, so the rejection can only be
+    the unknown volume ratio.
+    """
+    cfg = replace(liquid_cfg, strategy=replace(liquid_cfg.strategy, min_volume_ratio=1.5))
+    features = signals.compute_features(_with_final_volume(pullback_bars, 3.0), cfg.strategy)
+    assert isinstance(signals.screen_entry("TEST", features, cfg), EntryCandidate)
+
+    features.loc[features.index[-1], "volume_ratio"] = float("nan")
+    assert signals.screen_entry("TEST", features, cfg) is RejectReason.VOLUME_FILTER
+
+
+def test_a_50_day_trend_filter_admits_more_names(liquid_cfg: Config):
+    """The requested change should loosen the trend gate, not tighten it.
+
+    A stock that recovered recently sits above its 50-day average well before
+    it clears the 200-day one.
+    """
+    # A long decline followed by a short, modest recovery. Long enough to
+    # clear the 50-day average, far too short to lift the 200-day one.
+    recovering = np.concatenate([
+        np.linspace(100, 60, 375),
+        np.linspace(60, 66, 25),
+    ])
+    bars = make_bars(recovering, volume=1e8)
+
+    slow = replace(liquid_cfg, strategy=replace(liquid_cfg.strategy, trend_ma_days=200))
+    fast = replace(liquid_cfg, strategy=replace(liquid_cfg.strategy, trend_ma_days=50))
+
+    slow_price = signals.compute_features(bars, slow.strategy).iloc[-1]
+    fast_price = signals.compute_features(bars, fast.strategy).iloc[-1]
+
+    assert slow_price["close"] < slow_price["sma_trend"], "still below the 200-day"
+    assert fast_price["close"] > fast_price["sma_trend"], "already above the 50-day"

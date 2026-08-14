@@ -27,6 +27,7 @@ FEATURE_COLUMNS = (
     "momentum",
     "atr",
     "adv",
+    "volume_ratio",
 )
 
 
@@ -46,6 +47,7 @@ class RejectReason(StrEnum):
     BELOW_TREND_MA = "below_trend_ma"
     WEAK_MOMENTUM = "weak_momentum"
     NOT_OVERSOLD = "not_oversold"
+    VOLUME_FILTER = "volume_filter"
     PRICE_FILTER = "price_filter"
     ILLIQUID = "illiquid"
     EARNINGS_BLACKOUT = "earnings_blackout"
@@ -132,6 +134,12 @@ def compute_features(bars: pd.DataFrame, strategy: StrategyConfig, adv_window: i
     )
     out["atr"] = indicators.atr(out["high"], out["low"], out["close"], period=20)
     out["adv"] = indicators.dollar_volume(out["close"], out["volume"], adv_window)
+    # Today's volume against its own trailing average. A ratio rather than a
+    # level, so the threshold means the same thing for a mega-cap and a
+    # mid-cap.
+    out["volume_ratio"] = indicators.volume_ratio(
+        out["volume"], strategy.volume_ma_days
+    )
     return out
 
 
@@ -229,6 +237,19 @@ def screen_entry(
     rsi = float(last["rsi"])
     if rsi > strategy.rsi_entry_max:
         return RejectReason.NOT_OVERSOLD
+
+    if strategy.min_volume_ratio > 0 or strategy.max_volume_ratio > 0:
+        ratio = last.get("volume_ratio")
+        # An unknown ratio cannot be judged. Rejecting is the conservative
+        # choice: the filter was switched on deliberately, so silently
+        # ignoring it would trade a setup the user asked to exclude.
+        if pd.isna(ratio):
+            return RejectReason.VOLUME_FILTER
+        ratio = float(ratio)
+        if strategy.min_volume_ratio > 0 and ratio < strategy.min_volume_ratio:
+            return RejectReason.VOLUME_FILTER
+        if strategy.max_volume_ratio > 0 and ratio > strategy.max_volume_ratio:
+            return RejectReason.VOLUME_FILTER
 
     rank_value = -rsi if strategy.ranking is Ranking.MOST_OVERSOLD else momentum
 
