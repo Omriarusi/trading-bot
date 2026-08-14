@@ -198,6 +198,7 @@ class Backtester:
         if not features:
             raise ValueError("No symbol had enough history to backtest")
 
+        eligible_by_date = self._eligible_by_date(features)
         benchmark_features = self._prepare_benchmark(benchmark_bars)
         calendar = self._calendar(features, benchmark_features, start, end)
         if len(calendar) < 2:
@@ -337,7 +338,8 @@ class Backtester:
             )
             if can_open:
                 pending_entries = self._select_entries(
-                    features, today, positions, exiting, cash, equity, peak_equity
+                    features, today, positions, exiting, cash, equity, peak_equity,
+                    eligible_today=eligible_by_date.get(today, []),
                 )
 
         equity_curve = pd.Series(
@@ -382,6 +384,38 @@ class Backtester:
                 log.warning("%s: %s", symbol, exc)
                 skipped.append(symbol)
         return prepared, skipped
+
+    def _eligible_by_date(
+        self, features: dict[str, pd.DataFrame]
+    ) -> dict[pd.Timestamp, list[str]]:
+        """Pre-index the days on which each symbol could possibly be a candidate.
+
+        The daily loop otherwise asks ``screen_entry`` about every symbol on
+        every day: 500 symbols over 2,300 days is 1.2 million calls per
+        backtest, and the sweep runs eighteen of them. On a typical day only a
+        handful of names are oversold, so almost all of that work is spent
+        confirming a rejection.
+
+        The two conditions used here are *necessary* conditions inside
+        ``screen_entry`` — it rejects outright on either — so a symbol filtered
+        out here could never have become a candidate. That keeps this a pure
+        speed-up rather than a second, drifting copy of the entry rules;
+        ``screen_entry`` still makes every actual decision.
+        """
+        threshold = self.cfg.strategy.rsi_entry_max
+        by_date: dict[pd.Timestamp, list[str]] = {}
+
+        for symbol, frame in features.items():
+            eligible = (
+                frame["rsi"].notna()
+                & frame["sma_trend"].notna()
+                & (frame["close"] > frame["sma_trend"])
+                & (frame["rsi"] <= threshold)
+            )
+            for when in frame.index[eligible]:
+                by_date.setdefault(when, []).append(symbol)
+
+        return by_date
 
     def _prepare_benchmark(self, frame: pd.DataFrame) -> pd.DataFrame:
         out = frame.copy()
@@ -458,9 +492,12 @@ class Backtester:
         self, features: dict[str, pd.DataFrame], today: pd.Timestamp,
         positions: dict[str, OpenPosition], exiting: set[str],
         cash: float, equity: float, peak_equity: float,
+        eligible_today: list[str] | None = None,
     ) -> list[Sizing]:
         candidates = []
-        for symbol in features:
+        # Only symbols that cleared the necessary conditions are worth asking
+        # about; the rest cannot pass screen_entry by construction.
+        for symbol in eligible_today if eligible_today is not None else features:
             if symbol in positions:
                 continue
             history = self._decision_bar(features, symbol, today)

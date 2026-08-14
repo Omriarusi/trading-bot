@@ -161,10 +161,11 @@ universe:
   # Explicit ticker list lives in bot/universe_list.py so it is reviewable
   # in diffs rather than buried in config.
   #
-  # "blended" is what every published figure was measured on. Trading a
-  # different universe than the one that was backtested makes the backtest
-  # a statement about some other strategy.
-  list_name: blended
+  # The S&P 500, generated into bot/sp500.py and refreshed monthly. Trading
+  # a different universe than the one that was backtested makes the
+  # backtest a statement about some other strategy, so re-run the sweep
+  # after changing this.
+  list_name: sp500
 
 
 data:

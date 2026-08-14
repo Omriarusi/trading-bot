@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 from backtest.engine import Backtester, compute_stats
+from bot import signals
 from bot.config import Config
 from tests.conftest import falling_series, make_bars, trending_series
 
@@ -264,3 +265,41 @@ def test_results_are_unchanged_by_the_single_bar_optimisation(bt_cfg, market, be
     assert [(t.symbol, t.entry_date, t.shares, t.exit_reason) for t in result.trades] == [
         (t.symbol, t.entry_date, t.shares, t.exit_reason) for t in again.trades
     ]
+
+
+def test_the_eligibility_prefilter_changes_nothing(bt_cfg, market, benchmark):
+    """The prefilter must be a pure speed-up, not a second copy of the rules.
+
+    It uses only conditions screen_entry rejects on outright, so every symbol
+    it removes was already impossible. Comparing against the unfiltered path
+    is what keeps that true if either side is edited later.
+    """
+    bt = Backtester(bt_cfg, starting_equity=1400.0)
+    features, _ = bt._prepare(market)
+    eligible = bt._eligible_by_date(features)
+
+    from bot.signals import RejectReason
+
+    for when in list(features["AAA"].index)[250:400]:
+        allowed = set(eligible.get(when, []))
+        for symbol in features:
+            bar = bt._decision_bar(features, symbol, when)
+            if bar is None:
+                continue
+            outcome = signals.screen_entry(symbol, bar, bt_cfg)
+            if not isinstance(outcome, RejectReason):
+                assert symbol in allowed, (
+                    f"{symbol} on {when.date()} passed screen_entry but the "
+                    "prefilter excluded it"
+                )
+
+
+def test_the_prefilter_actually_filters(bt_cfg, market, benchmark):
+    """A prefilter that admits everything would be silently useless."""
+    bt = Backtester(bt_cfg, starting_equity=1400.0)
+    features, _ = bt._prepare(market)
+    eligible = bt._eligible_by_date(features)
+
+    trading_days = len(features["AAA"])
+    admitted = sum(len(v) for v in eligible.values())
+    assert admitted < trading_days * len(features) * 0.25
