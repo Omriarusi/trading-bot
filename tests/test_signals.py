@@ -257,3 +257,35 @@ def test_risk_off_flatten_is_a_distinct_configuration(cfg: Config):
     flattening = replace(cfg, regime=replace(cfg.regime, risk_off_action=RiskOffAction.FLATTEN))
     assert flattening.regime.risk_off_action is RiskOffAction.FLATTEN
     assert cfg.regime.risk_off_action is RiskOffAction.HOLD
+
+
+def test_disabling_the_ma_target_holds_through_a_recross(cfg: Config):
+    """The variant that hands the exit to the trailing stop.
+
+    Measured over 2017-2026, the moving-average target produced +2.53%
+    average wins against -3.81% average losses: winners were cut while
+    losers ran to the full stop. Turning it off must actually stop the
+    early exit, or the variant tests nothing.
+    """
+    recovering = np.concatenate([
+        trending_series(n=390, daily_drift=0.001, noise=0.005),
+        np.full(10, 200.0),
+    ])
+    features = signals.compute_features(make_bars(recovering), cfg.strategy)
+    assert signals.should_exit(features, cfg, holding_days=2) is ExitReason.TARGET
+
+    patient = replace(
+        cfg,
+        strategy=replace(cfg.strategy, exit_on_ma_recross=False, rsi_exit_min=99.5),
+    )
+    assert signals.should_exit(features, patient, holding_days=2) is None
+
+
+def test_the_time_stop_still_applies_without_the_ma_target(cfg: Config):
+    """Disabling one exit must not leave a position with no way out."""
+    patient = replace(
+        cfg,
+        strategy=replace(cfg.strategy, exit_on_ma_recross=False, rsi_exit_min=99.5),
+    )
+    features = signals.compute_features(make_bars(trending_series(n=400)), patient.strategy)
+    assert signals.should_exit(features, patient, holding_days=patient.risk.max_holding_days) is ExitReason.TIME_STOP

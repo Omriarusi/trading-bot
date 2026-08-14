@@ -1,0 +1,78 @@
+name: Strategy sweep
+
+# Compares the pre-registered strategy variants over identical history.
+# Manual only: this is a decision-making tool, not a metric to accumulate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "Years of history"
+        required: false
+        default: "10"
+      equity:
+        description: "Starting equity"
+        required: false
+        default: "1400"
+      universe:
+        description: "liquid_us_large_cap, high_beta_us, or blended"
+        required: false
+        default: "blended"
+      start:
+        description: "Start date (YYYY-MM-DD), to test a specific regime"
+        required: false
+      end:
+        description: "End date (YYYY-MM-DD)"
+        required: false
+  push:
+    paths:
+      - "backtest/sweep.py"
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run sweep
+        env:
+          IN_YEARS: ${{ inputs.years }}
+          IN_EQUITY: ${{ inputs.equity }}
+          IN_UNIVERSE: ${{ inputs.universe }}
+          IN_START: ${{ inputs.start }}
+          IN_END: ${{ inputs.end }}
+        run: |
+          set -euo pipefail
+          mkdir -p results
+
+          # Push events receive no workflow_dispatch input defaults.
+          IN_YEARS="${IN_YEARS:-10}"
+          IN_EQUITY="${IN_EQUITY:-1400}"
+          IN_UNIVERSE="${IN_UNIVERSE:-blended}"
+
+          ARGS=(--years "$IN_YEARS" --equity "$IN_EQUITY" --universe "$IN_UNIVERSE")
+          if [ -n "$IN_START" ]; then ARGS+=(--start "$IN_START"); fi
+          if [ -n "$IN_END" ];   then ARGS+=(--end "$IN_END"); fi
+
+          python -m bot.cli sweep "${ARGS[@]}" --json-out results/sweep.json \
+            | tee results/sweep.md
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-results
+          path: results/
+          retention-days: 30

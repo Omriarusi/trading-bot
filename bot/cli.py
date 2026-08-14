@@ -262,14 +262,61 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def cmd_sweep(args) -> int:
+    """Backtest several pre-registered strategy variants over identical data."""
+    from backtest.sweep import render_sweep, run_sweep
+    from bot.data import PriceRepository
+    from bot.universe_list import get_universe
+
+    cfg = load_config(args.config)
+    if args.years:
+        cfg = _apply_overrides(cfg, args)
+
+    repository = PriceRepository(cfg.data)
+    symbols = list(get_universe(args.universe or cfg.universe.list_name))
+
+    log.info("Fetching %d symbols plus benchmark...", len(symbols))
+    bars, failures = repository.get_many(symbols)
+    if not bars:
+        print("No price data available; cannot sweep.")
+        return 1
+    if failures:
+        log.warning("%d symbol(s) unavailable", len(failures))
+
+    benchmark = repository.get(cfg.regime.benchmark)
+    results = run_sweep(
+        cfg,
+        {s: b.frame for s, b in bars.items()},
+        benchmark.frame,
+        starting_equity=args.equity or cfg.account.assumed_equity,
+        start=_parse_date(args.start),
+        end=_parse_date(args.end),
+    )
+
+    report = render_sweep(results)
+    print(report)
+    _write_step_summary(report)
+
+    if args.json_out:
+        path = Path(args.json_out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {v.name: stats for v, stats in results}, indent=2, sort_keys=True
+            )
+            + "\n"
+        )
+    return 0
+
+
 def _apply_overrides(cfg: Config, args) -> Config:
-    """Apply sweep overrides without touching the committed config file."""
+    """Apply command-line overrides without touching the committed config file."""
     from dataclasses import replace
 
     risk_cfg = cfg.risk
-    if args.risk_per_trade:
+    if getattr(args, "risk_per_trade", None):
         risk_cfg = replace(risk_cfg, risk_per_trade_pct=args.risk_per_trade)
-    if args.max_positions:
+    if getattr(args, "max_positions", None):
         risk_cfg = replace(risk_cfg, max_concurrent_positions=args.max_positions)
 
     data_cfg = cfg.data
@@ -320,6 +367,17 @@ def build_parser() -> argparse.ArgumentParser:
     bt.add_argument("--max-positions", type=int, help="override concurrent position cap")
     bt.add_argument("--json-out", help="write statistics as JSON to this path")
     bt.set_defaults(func=cmd_backtest)
+
+    sweep = sub.add_parser(
+        "sweep", help="compare pre-registered strategy variants over identical data"
+    )
+    sweep.add_argument("--start", help="YYYY-MM-DD")
+    sweep.add_argument("--end", help="YYYY-MM-DD")
+    sweep.add_argument("--years", type=float, help="how much history to fetch")
+    sweep.add_argument("--equity", type=float, help="starting equity")
+    sweep.add_argument("--universe", help="named universe to trade")
+    sweep.add_argument("--json-out", help="write statistics as JSON to this path")
+    sweep.set_defaults(func=cmd_sweep)
 
     return parser
 

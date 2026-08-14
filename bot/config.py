@@ -146,6 +146,16 @@ class StrategyConfig:
     rsi_exit_min: float = 70.0
     ranking: Ranking = Ranking.MOST_OVERSOLD
 
+    # Exit on a close back above the short moving average.
+    #
+    # This is the classic mean-reversion exit and it fires quickly, which
+    # caps the average winner. Measured over 2017-2026 it produced +2.53%
+    # average wins against -3.81% average losses: the strategy was right
+    # more often than not and still barely made money, because the losers
+    # were allowed to run to the full stop while the winners were cut.
+    # Disabling it hands the exit to the trailing stop instead.
+    exit_on_ma_recross: bool = True
+
 
 @dataclass(frozen=True)
 class UniverseConfig:

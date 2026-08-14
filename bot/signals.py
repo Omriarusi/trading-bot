@@ -276,7 +276,7 @@ def should_exit(
     exit_ma = last.get("sma_exit")
     rsi = last.get("rsi")
 
-    if pd.notna(exit_ma) and close > float(exit_ma):
+    if strategy.exit_on_ma_recross and pd.notna(exit_ma) and close > float(exit_ma):
         return ExitReason.TARGET
     if pd.notna(rsi) and float(rsi) >= strategy.rsi_exit_min:
         return ExitReason.TARGET
