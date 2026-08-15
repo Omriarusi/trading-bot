@@ -120,3 +120,21 @@ def test_combined_relative_variants_still_track_the_loaded_config():
     hypothetically_adopted = replace(Config(), risk=replace(Config().risk, risk_per_trade_pct=9.0))
     resolved = {v.name: v for v in VARIANTS}["combined_ma50"].apply(hypothetically_adopted)
     assert resolved.risk.risk_per_trade_pct == 9.0
+
+
+def test_fast_exit_variant_actually_shortens_the_hold():
+    """The variant claims a 3-day cap; verify it isn't silently a no-op.
+
+    combined_fast_exit tracks whatever cfg is passed in, so feed it the
+    adopted strategy (combined applied to a default Config()) rather than a
+    bare default, matching how the CLI actually calls it.
+    """
+    from backtest.sweep import VARIANTS
+
+    by_name = {v.name: v for v in VARIANTS}
+    adopted = by_name["combined"].apply(Config())
+    cfg = by_name["combined_fast_exit"].apply(adopted)
+
+    assert cfg.risk.max_holding_days == 3
+    # Still the adopted strategy's entry/exit rules underneath.
+    assert cfg.strategy.rsi_entry_max == 15.0

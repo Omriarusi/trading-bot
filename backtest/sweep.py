@@ -158,6 +158,24 @@ def _combined_quiet(cfg: Config) -> Config:
     return _volume_quiet(_combined(cfg))
 
 
+def _combined_fast_exit(cfg: Config) -> Config:
+    """The adopted strategy, forced out after 3 days instead of 30.
+
+    True scalping — holds measured in seconds to minutes, dozens of trades a
+    day — cannot run on this repository at all: a twice-daily scheduled job
+    cannot react on that timescale, free data sources give at most a few
+    weeks of intraday history (not enough for a trustworthy backtest), and
+    the marketable-limit crossing this bot already uses to avoid bad fills
+    (0.3% each way, 0.6% round trip) alone exceeds a typical scalp target of
+    0.1-0.3%. This is the fastest turnover actually testable within the
+    daily-bar architecture: not scalping, but the nearest honest analogue.
+    The trailing stop stays at combined's 2.5 ATR — it can never sit tighter
+    than the initial stop, so 3 days is rarely enough room for it to have
+    ratcheted up at all. The 3-day cap does essentially all of the work here.
+    """
+    return replace(cfg, risk=replace(cfg.risk, max_holding_days=3))
+
+
 VARIANTS: tuple[Variant, ...] = (
     # Fixed historical progression: each ignores the config passed in and
     # starts from _original_baseline(), so this group stays a stable
@@ -183,6 +201,7 @@ VARIANTS: tuple[Variant, ...] = (
     Variant("combined_ma50", "currently adopted strategy, 50-day trend filter", _combined_ma50),
     Variant("combined_capitulation", "currently adopted strategy, volume >= 1.5x average", _combined_capitulation),
     Variant("combined_quiet", "currently adopted strategy, volume <= 1.0x average", _combined_quiet),
+    Variant("combined_fast_exit", "currently adopted strategy, 3-day max hold (fastest honest analogue to scalping)", _combined_fast_exit),
 )
 
 
