@@ -2,10 +2,10 @@
   "equity_at_session_start": 1400.0,
   "halted_on": null,
   "halted_reason": null,
-  "last_run_utc": "2026-08-17T14:04:07+00:00",
+  "last_run_utc": "2026-08-17T14:57:35+00:00",
   "last_session_date": "2026-08-17",
   "peak_equity": 1400.0,
   "positions": {},
-  "run_count": 4,
+  "run_count": 5,
   "version": 1
 }
