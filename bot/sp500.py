@@ -1,6 +1,6 @@
 """S&P 500 constituents — generated, do not edit by hand.
 
-Snapshot taken 2026-09-01 from Wikipedia.
+Snapshot taken 2026-10-01 from Wikipedia.
 Regenerate with: python scripts/refresh_sp500.py
 
 Important when reading any backtest run against this list: these are the
@@ -14,7 +14,7 @@ which is the actual use.
 
 from __future__ import annotations
 
-SP500_SNAPSHOT_DATE = "2026-09-01"
+SP500_SNAPSHOT_DATE = "2026-10-01"
 
 SP500: tuple[str, ...] = (
     "A", "AAPL", "ABBV", "ABNB", "ABT", "ACGL", "ACN", "ADBE",
@@ -24,7 +24,7 @@ SP500: tuple[str, ...] = (
     "ANET", "AON", "AOS", "APA", "APD", "APH", "APO", "APP",
     "APTV", "ARE", "ARES", "ATO", "AVGO", "AVY", "AWK", "AXON",
     "AXP", "AZO", "BA", "BAC", "BALL", "BAX", "BBY", "BDX",
-    "BEN", "BF.B", "BG", "BIIB", "BKNG", "BKR", "BLDR", "BLK",
+    "BE", "BEN", "BF.B", "BG", "BIIB", "BKNG", "BKR", "BLK",
     "BMY", "BNY", "BR", "BRK.B", "BRO", "BSX", "BX", "BXP",
     "C", "CAH", "CARR", "CASY", "CAT", "CB", "CBOE", "CBRE",
     "CCI", "CCL", "CDNS", "CDW", "CEG", "CF", "CFG", "CHD",
@@ -47,33 +47,33 @@ SP500: tuple[str, ...] = (
     "GWW", "HAL", "HAS", "HBAN", "HCA", "HD", "HIG", "HII",
     "HLT", "HON", "HONA", "HOOD", "HPE", "HPQ", "HRL", "HSIC",
     "HST", "HSY", "HUBB", "HUM", "HWM", "IBKR", "IBM", "ICE",
-    "IDXX", "IEX", "IFF", "INCY", "INTC", "INTU", "INVH", "IP",
-    "IQV", "IR", "IRM", "ISRG", "IT", "ITW", "IVZ", "J",
-    "JBHT", "JBL", "JCI", "JKHY", "JNJ", "JPM", "KDP", "KEY",
-    "KEYS", "KHC", "KIM", "KKR", "KLAC", "KMB", "KMI", "KO",
-    "KR", "KVUE", "L", "LDOS", "LEN", "LH", "LHX", "LII",
-    "LIN", "LITE", "LLY", "LMT", "LNT", "LOW", "LRCX", "LULU",
-    "LUV", "LVS", "LYB", "LYV", "MA", "MAA", "MAR", "MAS",
-    "MCD", "MCHP", "MCK", "MCO", "MDLZ", "MDT", "MET", "META",
-    "MGM", "MKC", "MLM", "MMM", "MNST", "MO", "MOS", "MPC",
-    "MPWR", "MRK", "MRNA", "MRSH", "MRVL", "MS", "MSCI", "MSFT",
-    "MSI", "MTB", "MTD", "MU", "NCLH", "NDAQ", "NDSN", "NEE",
-    "NEM", "NFLX", "NI", "NKE", "NOC", "NOW", "NRG", "NSC",
-    "NTAP", "NTRS", "NUE", "NVDA", "NVR", "NWS", "NWSA", "NXPI",
-    "O", "ODFL", "OKE", "OMC", "ON", "ORCL", "ORLY", "OTIS",
-    "OXY", "PANW", "PAYX", "PCAR", "PCG", "PEG", "PEP", "PFE",
-    "PFG", "PG", "PGR", "PH", "PHM", "PKG", "PLD", "PLTR",
-    "PM", "PNC", "PNR", "PNW", "PODD", "PPG", "PPL", "PRU",
-    "PSA", "PSKY", "PSX", "PTC", "PWR", "PYPL", "Q", "QCOM",
-    "RCL", "RDDT", "REG", "REGN", "RF", "RJF", "RL", "RMD",
-    "ROK", "ROL", "ROP", "ROST", "RSG", "RTX", "RVTY", "SBAC",
-    "SBUX", "SCHW", "SHW", "SJM", "SLB", "SMCI", "SNA", "SNDK",
-    "SNPS", "SO", "SOLV", "SPG", "SPGI", "SRE", "STE", "STLD",
-    "STT", "STX", "STZ", "SW", "SWK", "SWKS", "SYF", "SYK",
-    "SYY", "T", "TAP", "TDG", "TDY", "TECH", "TEL", "TER",
-    "TFC", "TGT", "TJX", "TKO", "TMO", "TMUS", "TPL", "TPR",
-    "TRGP", "TRMB", "TROW", "TRV", "TSCO", "TSLA", "TSN", "TT",
-    "TTD", "TTWO", "TXN", "TXT", "TYL", "UAL", "UBER", "UDR",
+    "IDXX", "IEX", "IFF", "ILMN", "INCY", "INTC", "INTU", "INVH",
+    "IP", "IQV", "IR", "IRM", "ISRG", "IT", "ITW", "IVZ",
+    "J", "JBHT", "JBL", "JCI", "JKHY", "JNJ", "JPM", "KDP",
+    "KEY", "KEYS", "KHC", "KIM", "KKR", "KLAC", "KMB", "KMI",
+    "KO", "KR", "KVUE", "L", "LDOS", "LEN", "LH", "LHX",
+    "LII", "LIN", "LITE", "LLY", "LMT", "LNT", "LOW", "LRCX",
+    "LULU", "LUV", "LVS", "LYB", "LYV", "MA", "MAA", "MAR",
+    "MAS", "MCD", "MCHP", "MCK", "MCO", "MDLZ", "MDT", "MET",
+    "META", "MGM", "MKC", "MLM", "MMM", "MNST", "MO", "MOS",
+    "MPC", "MPWR", "MRK", "MRNA", "MRSH", "MRVL", "MS", "MSCI",
+    "MSFT", "MSI", "MTB", "MTD", "MU", "NCLH", "NDAQ", "NDSN",
+    "NEE", "NEM", "NFLX", "NI", "NKE", "NOC", "NOW", "NRG",
+    "NSC", "NTAP", "NTRS", "NUE", "NVDA", "NVR", "NWS", "NWSA",
+    "NXPI", "O", "ODFL", "OKE", "OMC", "ON", "ORCL", "ORLY",
+    "OTIS", "OXY", "P", "PANW", "PAYX", "PCAR", "PCG", "PEG",
+    "PEP", "PFE", "PFG", "PG", "PGR", "PH", "PHM", "PKG",
+    "PLD", "PLTR", "PM", "PNC", "PNR", "PNW", "PODD", "PPG",
+    "PPL", "PRU", "PSA", "PSKY", "PSX", "PTC", "PWR", "PYPL",
+    "Q", "QCOM", "RCL", "RDDT", "REG", "REGN", "RF", "RJF",
+    "RL", "RMD", "ROK", "ROL", "ROP", "ROST", "RSG", "RTX",
+    "RVTY", "SBAC", "SBUX", "SCHW", "SHW", "SJM", "SLB", "SMCI",
+    "SNA", "SNDK", "SNPS", "SO", "SOLV", "SPG", "SPGI", "SRE",
+    "STE", "STLD", "STT", "STX", "STZ", "SW", "SWK", "SWKS",
+    "SYF", "SYK", "SYY", "T", "TDG", "TDY", "TECH", "TEL",
+    "TER", "TFC", "TGT", "TJX", "TKO", "TMO", "TMUS", "TPL",
+    "TPR", "TRGP", "TRMB", "TROW", "TRV", "TSCO", "TSLA", "TSN",
+    "TT", "TTWO", "TXN", "TXT", "TYL", "UAL", "UBER", "UDR",
     "UHS", "ULTA", "UNH", "UNP", "UPS", "URI", "USB", "V",
     "VEEV", "VICI", "VLO", "VLTO", "VMC", "VMRK", "VRSK", "VRSN",
     "VRT", "VRTX", "VST", "VTR", "VTRS", "VZ", "WAB", "WAT",
